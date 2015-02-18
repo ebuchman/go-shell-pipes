@@ -16,16 +16,41 @@ func RunString(s string) string {
 	cmds := make([]*exec.Cmd, len(sp))
 	// create the commands
 	for i, c := range sp {
-		var cmd *exec.Cmd
 		cs := strings.Split(strings.TrimSpace(c), " ")
-		if len(cs) == 1 {
-			cmd = exec.Command(cs[0])
-		} else {
-			cmd = exec.Command(cs[0], cs[1:]...)
-		}
+		cmd := cmdFromStrings(cs)
 		cmds[i] = cmd
 	}
 
+	cmds = AssemblePipes(cmds, nil, buf)
+	RunCmds(cmds)
+
+	b := buf.Bytes()
+	return string(b)
+}
+
+func cmdFromStrings(cs []string) *exec.Cmd {
+	if len(cs) == 1 {
+		return exec.Command(cs[0])
+	}
+	return exec.Command(cs[0], cs[1:]...)
+}
+
+// Convert sequence of tokens into commands,
+// using "|" as a delimiter
+func RunStrings(tokens ...string) string {
+	buf := bytes.NewBuffer([]byte{})
+	cmds := []*exec.Cmd{}
+	args := []string{}
+	// accumulate tokens until a |
+	for _, t := range tokens {
+		if t != "|" {
+			args = append(args, t)
+		} else {
+			cmds = append(cmds, cmdFromStrings(args))
+			args = []string{}
+		}
+	}
+	cmds = append(cmds, cmdFromStrings(args))
 	cmds = AssemblePipes(cmds, nil, buf)
 	RunCmds(cmds)
 
