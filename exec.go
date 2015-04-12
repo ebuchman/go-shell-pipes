@@ -2,6 +2,7 @@ package pipes
 
 import (
 	"bytes"
+	"fmt"
 	"io"
 	"os/exec"
 	"strings"
@@ -22,7 +23,7 @@ func RunString(s string) (string, error) {
 	}
 
 	cmds = AssemblePipes(cmds, nil, buf)
-	if err := RunCmds(cmds); err != nil{
+	if err := RunCmds(cmds); err != nil {
 		return "", err
 	}
 
@@ -33,7 +34,7 @@ func RunString(s string) (string, error) {
 func cmdFromStrings(cs []string) *exec.Cmd {
 	if len(cs) == 1 {
 		return exec.Command(cs[0])
-	} else if len(cs) == 2{
+	} else if len(cs) == 2 {
 		return exec.Command(cs[0], cs[1])
 	}
 	return exec.Command(cs[0], cs[1:]...)
@@ -42,7 +43,7 @@ func cmdFromStrings(cs []string) *exec.Cmd {
 // Convert sequence of tokens into commands,
 // using "|" as a delimiter
 func RunStrings(tokens ...string) (string, error) {
-	if len(tokens) == 0{
+	if len(tokens) == 0 {
 		return "", nil
 	}
 	buf := bytes.NewBuffer([]byte{})
@@ -59,23 +60,26 @@ func RunStrings(tokens ...string) (string, error) {
 	}
 	cmds = append(cmds, cmdFromStrings(args))
 	cmds = AssemblePipes(cmds, nil, buf)
-	if err := RunCmds(cmds); err != nil{
-		return "", err 
+	if err := RunCmds(cmds); err != nil {
+		return "", fmt.Errorf("%s; %s", err.Error(), string(buf.Bytes()))
 	}
 
 	b := buf.Bytes()
 	return string(b), nil
 }
 
-// Pipe stdout of each command to into stdin of next
+// Pipe stdout of each command into stdin of next
 func AssemblePipes(cmds []*exec.Cmd, stdin io.Reader, stdout io.Writer) []*exec.Cmd {
 	cmds[0].Stdin = stdin
+	cmds[0].Stderr = stdout
 	// assemble pipes
 	for i, c := range cmds {
 		if i < len(cmds)-1 {
 			cmds[i+1].Stdin, _ = c.StdoutPipe()
+			cmds[i+1].Stderr = stdout
 		} else {
 			c.Stdout = stdout
+			c.Stderr = stdout
 		}
 	}
 	return cmds
@@ -85,17 +89,17 @@ func AssemblePipes(cmds []*exec.Cmd, stdin io.Reader, stdout io.Writer) []*exec.
 func RunCmds(cmds []*exec.Cmd) error {
 	// start processes in descending order
 	for i := len(cmds) - 1; i > 0; i-- {
-		if err := cmds[i].Start(); err != nil{
+		if err := cmds[i].Start(); err != nil {
 			return err
 		}
 	}
 	// run the first process
-	if err := cmds[0].Run(); err != nil{
+	if err := cmds[0].Run(); err != nil {
 		return err
 	}
 	// wait on processes in ascending order
 	for i := 1; i < len(cmds); i++ {
-		if err := cmds[i].Wait(); err !=nil {
+		if err := cmds[i].Wait(); err != nil {
 			return err
 		}
 	}
